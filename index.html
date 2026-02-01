@@ -1,10 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>The Gravity Gardener - Final Edition</title>
+    <title>The Gravity Gardener</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <style>
         body {
-            background-color: #1a1a2e;
+            background-color: #1a1a2e; /* Deep space blue */
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -12,9 +17,10 @@
             align-items: center;
             margin: 0;
             padding: 10px;
-            user-select: none;
+            user-select: none; /* Prevents text highlighting on touch */
+            touch-action: manipulation; /* Improves touch response */
         }
-        h1 { margin-bottom: 5px; text-shadow: 0 0 10px #4488FF; }
+        h1 { margin-bottom: 5px; text-shadow: 0 0 10px #4488FF; font-size: 24px; }
         p { margin-top: 0; color: #aaa; font-size: 14px; }
         
         #gameCanvas {
@@ -23,6 +29,7 @@
             border-radius: 10px;
             cursor: crosshair;
             box-shadow: 0 0 30px rgba(0, 100, 255, 0.2);
+            max-width: 100%; /* Responsive fit */
         }
 
         .panel {
@@ -31,12 +38,14 @@
             background: rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             display: flex;
-            gap: 15px;
+            gap: 10px;
             align-items: center;
+            flex-wrap: wrap; /* Allows wrapping on smaller screens */
+            justify-content: center;
         }
 
         button {
-            padding: 8px 16px; font-size: 14px; cursor: pointer;
+            padding: 8px 12px; font-size: 14px; cursor: pointer;
             color: white; border: none; border-radius: 4px; font-weight: bold;
             transition: transform 0.1s;
         }
@@ -52,15 +61,17 @@
 
         input[type="number"] {
             padding: 5px; border-radius: 4px; border: none;
-            width: 60px; text-align: center; font-weight: bold;
+            width: 50px; text-align: center; font-weight: bold;
         }
+
+        /* Labels for inputs */
+        label { font-size: 14px; font-weight: bold; margin-left: 5px; }
 
     </style>
 </head>
 <body>
 
     <h1>🚀 Mission: Earth Return</h1>
-    <p>Left Click: Add Moon | Right Click: Delete Moon</p>
     
     <canvas id="gameCanvas" width="800" height="500"></canvas>
 
@@ -70,10 +81,10 @@
         <button id="btnMed" class="size-btn active" onclick="setMoonSize(150, this)">Medium</button>
         <button id="btnLarge" class="size-btn" onclick="setMoonSize(400, this)">Large</button>
         
-        <span style="margin-left: 20px;">Speed:</span>
+        <label>Speed:</label>
         <input type="number" id="speedInput" value="2" step="0.5">
 
-        <span style="margin-left: 10px;">Gravity:</span>
+        <label>Gravity:</label>
         <input type="number" id="gravityInput" value="1000" step="500">
         <button class="btn-set" id="setGravityBtn">Set</button>
     </div>
@@ -82,6 +93,8 @@
         <button class="btn-launch" id="launchBtn">🚀 LAUNCH</button>
         <button class="btn-reset" id="resetBtn">🔄 Reset Rocket</button>
         <button class="btn-clear" id="clearBtn">🗑️ Clear Space</button>
+        
+        <button id="btnDeleteMode" style="background-color: #555; margin-left: 10px;">❌ Delete Mode: OFF</button>
     </div>
 
     <script>
@@ -90,8 +103,9 @@
 
         // --- GAME STATE ---
         let isSimulating = false;
+        let isDeleteMode = false; // New state for iPad deletion
         let moons = [];
-        let particles = []; // New: Holds all our explosion/confetti dots
+        let particles = []; 
         let currentMass = 150;
         let gravityConstant = 1000;
         let gameStatus = "PLANNING"; 
@@ -111,43 +125,40 @@
             }
         }
 
-        // --- PARTICLE SYSTEM (New!) ---
+        // --- PARTICLE SYSTEM ---
         class Particle {
             constructor(x, y, type) {
                 this.position = new Vector(x, y);
                 this.type = type; // "fire" or "confetti"
-                this.life = 1.0; // Starts at 100% visible
+                this.life = 1.0; 
                 
-                // Random Explosion Speed
                 let angle = Math.random() * Math.PI * 2;
                 let speed = Math.random() * (type === "fire" ? 3 : 5);
                 this.velocity = new Vector(Math.cos(angle) * speed, Math.sin(angle) * speed);
 
-                // Colors
                 if (type === "fire") {
                     const colors = ["#FF5722", "#FF9800", "#FFC107"];
                     this.color = colors[Math.floor(Math.random() * colors.length)];
-                    this.decay = 0.03; // Fades fast
+                    this.decay = 0.03;
                 } else {
                     const colors = ["#00E676", "#2979FF", "#E040FB", "#FFFF00"];
                     this.color = colors[Math.floor(Math.random() * colors.length)];
-                    this.decay = 0.01; // Fades slow
+                    this.decay = 0.01;
                 }
             }
 
             update() {
                 this.position.add(this.velocity);
                 this.life -= this.decay;
-                
                 if (this.type === "confetti") {
-                    this.velocity.y += 0.1; // Confetti falls down (gravity)
-                    this.velocity.x *= 0.95; // Air resistance slows it sideways
+                    this.velocity.y += 0.1; // Gravity
+                    this.velocity.x *= 0.95; // Drag
                 }
             }
 
             draw(ctx) {
                 ctx.save();
-                ctx.globalAlpha = Math.max(0, this.life); // Fade out
+                ctx.globalAlpha = Math.max(0, this.life);
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
                 ctx.arc(this.position.x, this.position.y, this.type === "fire" ? 6 : 4, 0, Math.PI * 2);
@@ -156,14 +167,14 @@
             }
         }
 
-        // --- OBJECTS ---
+        // --- GAME OBJECTS ---
         class Rocket {
             constructor() {
                 this.startPos = new Vector(50, canvas.height / 2);
                 this.position = new Vector(this.startPos.x, this.startPos.y);
                 this.velocity = new Vector(0, 0);
                 this.radius = 15;
-                this.visible = true; // Hide rocket when it explodes
+                this.visible = true; 
             }
             applyForce(force) { this.velocity.add(force); }
             update() { this.position.add(this.velocity); }
@@ -193,6 +204,8 @@
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("🌑", this.position.x, this.position.y);
+                
+                // Debug Ring (helps see delete radius)
                 ctx.strokeStyle = 'rgba(100,100,100,0.5)';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -221,7 +234,7 @@
         let rocket = new Rocket();
         let earth = new Earth();
 
-        // --- HELPER FUNCTIONS ---
+        // --- PHYSICS & HELPERS ---
         function spawnParticles(x, y, type, count) {
             for(let i=0; i<count; i++) {
                 particles.push(new Particle(x, y, type));
@@ -242,7 +255,7 @@
             if (rocket.position.dist(earth.position) < earth.radius) {
                 gameStatus = "WON";
                 isSimulating = false;
-                rocket.visible = false; // Hide rocket
+                rocket.visible = false;
                 spawnParticles(earth.position.x, earth.position.y, "confetti", 100);
             }
 
@@ -326,44 +339,69 @@
                 checkCollisions();
             }
 
-            // Update & Draw Particles (Even if game stopped)
+            // Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.update();
                 p.draw(ctx);
-                if (p.life <= 0) particles.splice(i, 1); // Remove dead particles
+                if (p.life <= 0) particles.splice(i, 1);
             }
 
             rocket.draw(ctx);
-            drawMessage(); // Show text overlay
+            drawMessage(); 
 
             requestAnimationFrame(gameLoop);
         }
 
         // --- CONTROLS ---
+
+        // Unified Touch/Click Handler
         canvas.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return; 
+            if (e.button !== 0) return; // Only Left Click
             if (isSimulating) return;
+
             const rect = canvas.getBoundingClientRect();
-            moons.push(new Moon(e.clientX - rect.left, e.clientY - rect.top, currentMass));
+            // Scale logic for mobile touch accuracy (optional optimization)
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            if (isDeleteMode) {
+                // DELETE LOGIC
+                const mouseVec = new Vector(x, y);
+                // Filter out moons we clicked near
+                moons = moons.filter(moon => {
+                    return mouseVec.dist(moon.position) > moon.radius + 20;
+                });
+            } else {
+                // ADD LOGIC
+                moons.push(new Moon(x, y, currentMass));
+            }
         });
 
-        canvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); 
-            if (isSimulating) return;
-            const rect = canvas.getBoundingClientRect();
-            const mouseVec = new Vector(e.clientX - rect.left, e.clientY - rect.top);
-            moons = moons.filter(moon => mouseVec.dist(moon.position) > moon.radius);
+        // Delete Mode Toggle
+        document.getElementById('btnDeleteMode').addEventListener('click', function() {
+            isDeleteMode = !isDeleteMode;
+            if (isDeleteMode) {
+                this.textContent = "✅ Delete Mode: ON";
+                this.style.backgroundColor = "#D50000";
+                canvas.style.cursor = "not-allowed";
+            } else {
+                this.textContent = "❌ Delete Mode: OFF";
+                this.style.backgroundColor = "#555";
+                canvas.style.cursor = "crosshair";
+            }
         });
 
         document.getElementById('launchBtn').addEventListener('click', () => {
-            // New: Allow re-launching immediately after win/loss without explicit reset
             let speedVal = parseFloat(document.getElementById('speedInput').value);
             
-            // If we just finished a game, reset the rocket position automatically
+            // Auto-reset if just finished
             if (gameStatus === "WON" || gameStatus === "CRASHED" || gameStatus === "LOST") {
-                 rocket = new Rocket(); // Reset position
-                 particles = []; // Clear old explosions
+                 rocket = new Rocket(); 
+                 particles = []; 
             }
             
             rocket.velocity = new Vector(speedVal, 0); 
